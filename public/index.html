@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <title>Lucas IA</title>
+</head>
+
+<body>
+
+  <h1>🤖 Lucas IA</h1>
+
+  <div id="chat"></div>
+
+  <input id="input" placeholder="Digite algo..." />
+  <button onclick="send()">Enviar</button>
+
+  <script>
+    const chat = document.getElementById("chat");
+
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    const recognition = new SpeechRecognition();
+
+    recognition.lang = "pt-BR";
+    recognition.continuous = true;
+    recognition.interimResults = false;
+
+    let estado = "aguardando";
+    let controller = null;
+    let cancelado = false;
+
+    // 🎤 inicia automaticamente
+    function iniciarEscuta() {
+      try {
+        recognition.start();
+        console.log("🎤 Escuta iniciada");
+      } catch (e) {
+        console.log("Já está ouvindo...");
+      }
+    }
+
+    // 🔄 reinicia sempre
+    recognition.onend = () => {
+      console.log("🔄 Reiniciando escuta...");
+      iniciarEscuta();
+    };
+
+    recognition.onresult = async (event) => {
+      const texto = event.results[event.results.length - 1][0].transcript.toLowerCase();
+
+      console.log("Ouvido:", texto);
+
+      // 🔴 PARAR
+      if (
+        texto.includes("lucas") &&
+        (texto.includes("espera") || texto.includes("para") || texto.includes("parar"))
+      ) {
+        estado = "aguardando";
+        cancelado = true;
+
+        if (controller) controller.abort();
+
+        return;
+      }
+
+      // 🟢 ATIVAÇÃO
+      if (estado === "aguardando" && texto.includes("lucas")) {
+        estado = "escutando";
+
+        chat.innerHTML += `<div><b>Lucas:</b> Pode falar</div>`;
+        return;
+      }
+
+      // 🧠 PROCESSAR
+      if (estado === "escutando") {
+        estado = "processando";
+        cancelado = false;
+
+        chat.innerHTML += `<div><b>Você:</b> ${texto}</div>`;
+
+        try {
+          controller = new AbortController();
+
+          const res = await fetch("/chat", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json"
+            },
+            body: JSON.stringify({ message: texto }),
+            signal: controller.signal
+          });
+
+          const data = await res.json();
+
+          if (cancelado) return;
+
+          chat.innerHTML += `<div><b>Lucas:</b> ${data.reply}</div>`;
+
+        } catch (e) {
+          if (e.name === "AbortError") return;
+
+          console.error(e);
+        }
+
+        estado = "aguardando";
+      }
+    };
+
+    recognition.onerror = (e) => {
+      console.error("Erro:", e);
+    };
+
+    async function send() {
+      const input = document.getElementById("input");
+      const texto = input.value;
+
+      chat.innerHTML += `<div><b>Você:</b> ${texto}</div>`;
+
+      const res = await fetch("/chat", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ message: texto })
+      });
+
+      const data = await res.json();
+
+      chat.innerHTML += `<div><b>Lucas:</b> ${data.reply}</div>`;
+
+      input.value = "";
+    }
+
+    // 🚀 AUTO START
+    window.onload = () => {
+      iniciarEscuta();
+    };
+  </script>
+
+</body>
+
+</html>
